@@ -1,0 +1,111 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <SoftwareSerial.h>
+
+#define CMD_PLAY_NEXT 0x01
+#define CMD_PLAY_PREV 0x02
+#define CMD_PLAY_W_INDEX 0x03
+#define CMD_SET_VOLUME 0x06
+#define CMD_SEL_DEV 0x09
+#define CMD_PLAY_W_VOL 0x22
+#define CMD_PLAY 0x0D
+#define CMD_PAUSE 0x0E
+#define CMD_SINGLE_CYCLE 0x19
+
+#define DEV_TF 0x02
+#define SINGLE_CYCLE_ON 0x00
+#define SINGLE_CYCLE_OFF 0x01
+
+#define ARDUINO_RX 6  // Arduino Pin connected to the TX of the Serial MP3 Player module
+#define ARDUINO_TX 7  // Arduino Pin connected to the RX of the Serial MP3 Player module
+#define SS_PIN 10     // Arduino Pin connected to the SS of the RFID reader
+#define RST_PIN 5     // Arduino Pin connected to the RST of the RFID reader
+
+#define SONG_NUM 4  // 3 songs + 3 RFID cards, change it as your need
+
+int Banana = 0;  // or any other appropriate value
+int Car = 1;
+int Cat = 2;
+int Pencil = 3;
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+SoftwareSerial mp3(ARDUINO_RX, ARDUINO_TX);
+
+byte RFID_UIDs[SONG_NUM][4] = {
+  { 0x13, 0x98, 0xC0, 0xFE },  // UPDATE THIS VALUE FROM PREPARATION STEP
+  { 0x63, 0x4F, 0x7C, 0x34 },
+  { 0x70, 0x3A, 0x34, 0x12 },  // UPDATE THIS VALUE FROM PREPARATION STEP
+  { 0x93, 0x76, 0x55, 0xFE }   // UPDATE THIS VALUE FROM PREPARATION STEP
+                               // ADD MORE IF NEEDED
+};
+
+
+void setup() {
+  Serial.begin(9600);
+  mp3.begin(9600);
+  delay(500);  // wait chip initialization is complete
+
+  mp3_command(CMD_SEL_DEV, DEV_TF);  // select the TF card
+  delay(200);                        // wait for 200ms
+
+  SPI.begin();      // init SPI bus
+  rfid.PCD_Init();  // init MFRC522
+
+  Serial.println("Tap RFID Tag on reader");
+}
+
+
+void loop() {
+  if (rfid.PICC_IsNewCardPresent()) {  // new tag is available
+    if (rfid.PICC_ReadCardSerial()) {  // NUID has been read
+      Serial.print("Tag UID:");
+      for (int i = 0; i < rfid.uid.size; i++) {
+        Serial.print((rfid.uid.uidByte[i] < 0x10 ? " 0" : " "));
+        Serial.print(rfid.uid.uidByte[i], HEX);
+      }
+      Serial.println();
+
+      for (int index = 0; index < SONG_NUM; index++) {
+        if (rfid.uid.uidByte[0] == RFID_UIDs[Banana][0] && rfid.uid.uidByte[1] == RFID_UIDs[Banana][1] && rfid.uid.uidByte[2] == RFID_UIDs[Banana][2] && rfid.uid.uidByte[3] == RFID_UIDs[Banana][3]) {
+          Serial.print("Playing song ");
+          Serial.println(Banana);
+          mp3_command(CMD_PLAY_W_INDEX, Banana);  // Play mp3
+        }
+        // Repeat the same structure for other cards (Car, Cat, Pencil)
+        if (rfid.uid.uidByte[0] == RFID_UIDs[Car][0] && rfid.uid.uidByte[1] == RFID_UIDs[Car][1] && rfid.uid.uidByte[2] == RFID_UIDs[Car][2] && rfid.uid.uidByte[3] == RFID_UIDs[Car][3]) {
+          Serial.print("Playing song ");
+          Serial.println(Car);
+          mp3_command(CMD_PLAY_W_INDEX, Car);  // Play mp3
+        }
+        if (rfid.uid.uidByte[0] == RFID_UIDs[Cat][0] && rfid.uid.uidByte[1] == RFID_UIDs[Cat][1] && rfid.uid.uidByte[2] == RFID_UIDs[Cat][2] && rfid.uid.uidByte[3] == RFID_UIDs[Cat][3]) {
+          Serial.print("Playing song ");
+          Serial.println(Cat);
+          mp3_command(CMD_PLAY_W_INDEX, Cat);  // Play mp3
+        }
+        if (rfid.uid.uidByte[0] == RFID_UIDs[Pencil][0] && rfid.uid.uidByte[1] == RFID_UIDs[Pencil][1] && rfid.uid.uidByte[2] == RFID_UIDs[Pencil][2] && rfid.uid.uidByte[3] == RFID_UIDs[Pencil][3]) {
+          Serial.print("Playing song ");
+          Serial.println(Pencil);
+          mp3_command(CMD_PLAY_W_INDEX, Pencil);  // Play mp3
+        }
+      }
+
+      rfid.PICC_HaltA();       // halt PICC
+      rfid.PCD_StopCrypto1();  // stop encryption on PCD
+    }
+  }
+}
+
+void mp3_command(int8_t command, int16_t dat) {
+  int8_t frame[8] = { 0 };
+  frame[0] = 0x7e;                // starting byte
+  frame[1] = 0xff;                // version
+  frame[2] = 0x06;                // the number of bytes of the command without starting byte and ending byte
+  frame[3] = command;             //
+  frame[4] = 0x00;                // 0x00 = no feedback, 0x01 = feedback
+  frame[5] = (int8_t)(dat >> 8);  // data high byte
+  frame[6] = (int8_t)(dat);       // data low byte
+  frame[7] = 0xef;                // ending byte
+  for (uint8_t i = 0; i < 8; i++) {
+    mp3.write(frame[i]);
+  }
+}
